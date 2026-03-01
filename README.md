@@ -1,4 +1,4 @@
-# La-meva-app
+# La-meva-app                
 <!DOCTYPE html>
 <html lang="ca">
 <head>
@@ -19,14 +19,13 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, collection, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, collection, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Configuració de Firebase des de l'entorn
         const firebaseConfig = JSON.parse(__firebase_config);
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'pla-perfecte-v2';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'pla-perfecte-v3';
 
         let currentUser = null;
         window.historyData = []; 
@@ -46,6 +45,7 @@
         onAuthStateChanged(auth, (user) => {
             currentUser = user;
             if (user) {
+                // RULE 1: Ruta específica per usuari per a historial privat
                 const userPlansRef = collection(db, 'artifacts', appId, 'users', user.uid, 'plans');
                 onSnapshot(userPlansRef, (snapshot) => {
                     window.historyData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -71,6 +71,12 @@
             const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'plans', planId.toString());
             await updateDoc(docRef, { rating: rating });
         };
+
+        window.deletePlan = async (planId) => {
+            if (!currentUser) return;
+            const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'plans', planId.toString());
+            await deleteDoc(docRef);
+        };
     </script>
 
     <style>
@@ -83,7 +89,7 @@
         
         body {
             font-family: 'Quicksand', sans-serif;
-            background-color: var(--color-crema); /* Fons no blanc per defecte */
+            background-color: var(--color-crema);
             color: var(--color-marro-fosc);
             margin: 0;
             padding: 0;
@@ -141,25 +147,29 @@
 </head>
 <body class="min-h-screen flex flex-col">
 
-    <!-- Sidebar Historial -->
+    <!-- Sidebar Historial Individual -->
     <div id="sidebar" class="fixed top-0 left-0 h-full w-80 shadow-2xl sidebar-closed p-6 overflow-y-auto sidebar">
         <div class="flex justify-between items-center mb-8 border-b pb-4">
-            <h3 class="font-display text-xl font-bold">Els meus plans</h3>
+            <div>
+                <h3 class="font-display text-xl font-bold">Els meus plans</h3>
+                <p class="text-[10px] text-stone-400 uppercase tracking-widest mt-1">Historial personal</p>
+            </div>
             <button onclick="toggleSidebar()" class="p-2 hover:bg-stone-100 rounded-full">
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
         <div id="history-list" class="space-y-4">
-            <!-- Es carrega dinàmicament -->
+            <!-- Cargado mediante Firestore -->
         </div>
     </div>
 
-    <!-- Navegació -->
+    <!-- Navegación -->
     <nav class="p-6 flex justify-between items-center max-w-6xl mx-auto w-full">
         <button onclick="toggleSidebar()" class="flex items-center gap-3 group">
             <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center text-terra shadow-sm group-hover:shadow-md transition-all">
-                <i data-lucide="menu" class="w-5 h-5" style="color:#8d6e63"></i>
+                <i data-lucide="bookmark" class="w-5 h-5" style="color:#8d6e63"></i>
             </div>
+            <span class="text-[10px] font-bold uppercase tracking-widest text-stone-400 hidden sm:block">Historial</span>
         </button>
 
         <div class="flex items-center gap-4 bg-white/50 px-4 py-2 rounded-full border border-stone-200">
@@ -172,69 +182,71 @@
         </div>
     </nav>
 
-    <!-- Contingut Principal -->
+    <!-- Contenido -->
     <main class="flex-grow flex flex-col items-center justify-center px-6 py-12">
         <header class="text-center mb-12 max-w-2xl fade-in">
             <h1 id="main-title" class="font-display text-5xl md:text-7xl font-bold mb-4">Pla Perfecte</h1>
+            <!-- Frase debajo del título -->
             <p id="quote" class="italic text-stone-500 text-lg md:text-xl font-light leading-relaxed">Carregant inspiració...</p>
         </header>
 
-        <div class="grid lg:grid-cols-2 gap-8 w-full max-w-5xl items-start">
+        <div class="grid lg:grid-cols-2 gap-8 w-full max-w-5xl items-stretch">
             
-            <!-- Panell de configuració -->
-            <section class="card p-8 md:p-10 space-y-6">
-                <h2 id="label-config" class="text-2xl font-bold text-stone-800">Configura el teu dia</h2>
-                
-                <div class="space-y-4">
-                    <div>
-                        <label id="label-date" class="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Quan vols anar-hi?</label>
-                        <input type="date" id="dateInput" class="w-full p-4 rounded-xl border border-stone-200 focus:ring-2 focus:ring-stone-100 outline-none">
-                    </div>
-                    
-                    <div>
-                        <label id="label-temp" class="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Quin temps fa?</label>
-                        <select id="tempInput" class="w-full p-4 rounded-xl border border-stone-200 outline-none">
-                            <!-- Opcions dinàmiques -->
-                        </select>
-                    </div>
-
-                    <div>
-                        <label id="label-who" class="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Amb qui vas?</label>
-                        <select id="whoInput" class="w-full p-4 rounded-xl border border-stone-200 outline-none">
-                            <!-- Opcions dinàmiques -->
-                        </select>
+            <!-- Configuración -->
+            <section class="card p-8 md:p-10 space-y-6 flex flex-col justify-between">
+                <div>
+                    <h2 id="label-config" class="text-2xl font-bold text-stone-800 mb-6">Configura el teu dia</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label id="label-date" class="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Quan vols anar-hi?</label>
+                            <input type="date" id="dateInput" class="w-full p-4 rounded-xl border border-stone-200 outline-none">
+                        </div>
+                        <div>
+                            <label id="label-temp" class="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Quin temps fa?</label>
+                            <select id="tempInput" class="w-full p-4 rounded-xl border border-stone-200 outline-none"></select>
+                        </div>
+                        <div>
+                            <label id="label-who" class="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Amb qui vas?</label>
+                            <select id="whoInput" class="w-full p-4 rounded-xl border border-stone-200 outline-none"></select>
+                        </div>
                     </div>
                 </div>
-
-                <button id="btn-generate" onclick="generatePlan()" class="btn-primary w-full py-5 rounded-2xl font-bold uppercase tracking-widest text-sm shadow-lg">
+                <button id="btn-generate" onclick="generatePlan()" class="btn-primary w-full py-5 mt-6 rounded-2xl font-bold uppercase tracking-widest text-sm shadow-lg">
                     Generar Pla
                 </button>
             </section>
 
-            <!-- Resultat del Pla -->
+            <!-- Resultados -->
             <section id="result-area" class="hidden h-full">
                 <div class="card p-8 md:p-10 flex flex-col items-center justify-center text-center h-full fade-in">
                     <h3 id="label-result-title" class="font-display text-3xl font-bold text-terra mb-6">El Teu Pla</h3>
                     <p id="plan-text" class="text-2xl text-stone-700 italic font-medium leading-relaxed mb-10"></p>
                     
-                    <!-- Suggeriment IA -->
-                    <div id="ai-box" class="hidden w-full bg-stone-50 p-6 rounded-2xl border border-stone-100 text-left mb-8 transition-all">
+                    <div id="ai-box" class="hidden w-full bg-stone-50 p-6 rounded-2xl border border-stone-100 text-left mb-8">
                         <div class="flex items-center gap-2 mb-3 text-terra">
                             <i data-lucide="sparkles" class="w-4 h-4"></i>
-                            <span class="text-[10px] font-bold uppercase tracking-tighter">Suggeriment personalitzat</span>
+                            <span class="text-[10px] font-bold uppercase tracking-tighter">Detalls amb IA</span>
                         </div>
                         <p id="ai-text" class="text-sm text-stone-600 leading-relaxed"></p>
                     </div>
 
                     <div class="flex flex-wrap justify-center gap-4">
+                        <!-- Opción "Lo haré" -->
                         <button id="btn-save" onclick="saveCurrentPlan()" class="flex items-center gap-2 bg-green-50 text-green-700 px-6 py-4 rounded-full border border-green-100 hover:bg-green-100 transition-all font-bold text-xs uppercase">
-                            <i data-lucide="heart" class="w-4 h-4"></i>
-                            <span id="label-save">M'agrada</span>
+                            <i data-lucide="check" class="w-4 h-4"></i>
+                            <span id="label-save">Ho faré!</span>
                         </button>
                         
+                        <!-- Opción "Otro plan" -->
+                        <button onclick="generatePlan()" class="flex items-center gap-2 bg-stone-50 text-stone-700 px-6 py-4 rounded-full border border-stone-100 hover:bg-stone-100 transition-all font-bold text-xs uppercase">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                            <span id="label-another">Un altre pla</span>
+                        </button>
+
+                        <!-- Botón IA opcional -->
                         <button id="btn-ai" onclick="personalizeWithAI()" class="flex items-center gap-2 bg-purple-50 text-purple-700 px-6 py-4 rounded-full border border-purple-100 hover:bg-purple-100 transition-all font-bold text-xs uppercase">
                             <i data-lucide="sparkles" class="w-4 h-4" id="ai-icon"></i>
-                            <span id="label-ai">Personalitzar</span>
+                            <span id="label-ai">Més detalls</span>
                         </button>
                     </div>
                 </div>
@@ -243,7 +255,7 @@
     </main>
 
     <script>
-        const apiKey = ""; // S'injectarà automàticament
+        const apiKey = ""; 
         let currentPlanText = "";
         let isAiThinking = false;
 
@@ -251,13 +263,14 @@
             ca: {
                 mainTitle: "Pla Perfecte",
                 config: "Configura el teu dia",
-                date: "Quin dia és avui?",
+                date: "Quan vols anar-hi?",
                 temp: "Quin temps fa?",
                 who: "Amb qui vas?",
                 btnGen: "Generar Pla",
                 resTitle: "El teu moment ideal",
                 save: "Ho faré!",
-                ai: "Detalls amb IA ✨",
+                another: "Un altre pla",
+                ai: "Més detalls ✨",
                 saved: "Guardat!",
                 temps: { cold: "Fa fred", mild: "Temperat", hot: "Fa calor" },
                 whos: { solo: "Sol/a", friends: "Amics", couple: "En parella", family: "Família" },
@@ -279,13 +292,14 @@
             es: {
                 mainTitle: "Plan Perfecto",
                 config: "Configura tu día",
-                date: "¿Qué día es hoy?",
+                date: "¿Cuándo quieres ir?",
                 temp: "¿Qué tiempo hace?",
                 who: "¿Con quién vas?",
                 btnGen: "Generar Plan",
                 resTitle: "Tu momento ideal",
                 save: "¡Lo haré!",
-                ai: "Detalles con IA ✨",
+                another: "Otro plan",
+                ai: "Más detalles ✨",
                 saved: "¡Guardado!",
                 temps: { cold: "Hace frío", mild: "Templado", hot: "Hace calor" },
                 whos: { solo: "Solo/a", friends: "Amigos", couple: "En pareja", family: "Familia" }
@@ -293,13 +307,14 @@
             en: {
                 mainTitle: "Perfect Plan",
                 config: "Configure your day",
-                date: "What day is it?",
+                date: "When are you going?",
                 temp: "What's the weather?",
                 who: "Who are you with?",
                 btnGen: "Generate Plan",
                 resTitle: "Your ideal moment",
                 save: "I'll do it!",
-                ai: "AI Details ✨",
+                another: "Other plan",
+                ai: "More details ✨",
                 saved: "Saved!",
                 temps: { cold: "Cold", mild: "Mild", hot: "Hot" },
                 whos: { solo: "Solo", friends: "Friends", couple: "Couple", family: "Family" }
@@ -330,8 +345,8 @@
 
         async function getInspiration() {
             const lang = document.getElementById('lang').value;
-            const quote = await apiCall(`Genera una frase inspiradora molt curta (màxim 10 paraules) sobre viure el moment i gaudir de la vida en idioma ${lang}. No facis servir cometes.`, "Ets un expert en benestar.");
-            if (quote) document.getElementById('quote').innerText = quote;
+            const quote = await apiCall(`Genera una frase inspiradora molt curta (màxim 12 paraules) sobre viure el moment i gaudir del dia en idioma ${lang}. No facis servir cometes.`, "Ets un expert en motivació i benestar.");
+            if (quote) document.getElementById('quote').innerText = quote.trim();
         }
 
         function updateUI() {
@@ -346,12 +361,11 @@
             document.getElementById('btn-generate').innerText = t.btnGen;
             document.getElementById('label-result-title').innerText = t.resTitle;
             document.getElementById('label-save').innerText = t.save;
+            document.getElementById('label-another').innerText = t.another;
             document.getElementById('label-ai').innerText = t.ai;
 
-            // Omplir selectors
             const tempSelect = document.getElementById('tempInput');
             const whoSelect = document.getElementById('whoInput');
-            
             const oldT = tempSelect.value;
             const oldW = whoSelect.value;
 
@@ -359,16 +373,14 @@
             whoSelect.innerHTML = Object.entries(t.whos).map(([k,v]) => `<option value="${k}" ${k===oldW?'selected':''}>${v}</option>`).join('');
 
             getInspiration();
-            window.updateHistoryUI();
         }
 
         function generatePlan() {
-            const l = document.getElementById('lang').value;
             const temp = document.getElementById('tempInput').value;
             const who = document.getElementById('whoInput').value;
             const key = `${temp}_${who}`;
             
-            const availablePlans = translations.ca.plans[key]; // Fem servir la base en català i l'IA tradueix si cal
+            const availablePlans = translations.ca.plans[key];
             const randomPlan = availablePlans[Math.floor(Math.random() * availablePlans.length)];
             
             currentPlanText = randomPlan;
@@ -388,14 +400,13 @@
             isAiThinking = true;
             document.getElementById('ai-icon').className = "spinner";
             
-            const prompt = `Tinc aquest pla bàsic: "${currentPlanText}". El temps és ${temp} i vaig amb ${who}. Dona'm 3 detalls específics (per exemple, què menjar, quina música escoltar o un racó concret) per fer aquest pla inoblidable. Respon en idioma ${l}. Sigues breu i poètic.`;
+            const prompt = `Tinc aquest pla bàsic: "${currentPlanText}". El clima és ${temp} i estic amb ${who}. Dona'm 3 detalls màgics per elevar l'experiència. Respon en ${l}. Sigues poètic però breu.`;
             
-            const result = await apiCall(prompt, "Ets un guia d'estil de vida creatiu i detallista.");
+            const result = await apiCall(prompt, "Ets un dissenyador d'experiències inoblidables.");
             
             if (result) {
                 document.getElementById('ai-text').innerText = result;
                 document.getElementById('ai-box').classList.remove('hidden');
-                document.getElementById('ai-box').scrollIntoView({ behavior: 'smooth' });
             }
             
             isAiThinking = false;
@@ -412,7 +423,7 @@
                 date: document.getElementById('dateInput').value,
                 temp: document.getElementById('tempInput').selectedOptions[0].text,
                 who: document.getElementById('whoInput').selectedOptions[0].text,
-                rating: 0
+                rating: 5
             };
 
             await window.savePlanToCloud(planEntry);
@@ -432,17 +443,20 @@
         window.updateHistoryUI = () => {
             const list = document.getElementById('history-list');
             if (!window.historyData || window.historyData.length === 0) {
-                list.innerHTML = `<p class="text-stone-400 text-xs italic">Encara no has guardat cap pla.</p>`;
+                list.innerHTML = `<p class="text-stone-400 text-xs italic text-center mt-10">Encara no has guardat plans privats.</p>`;
                 return;
             }
 
             list.innerHTML = window.historyData.map(item => `
-                <div class="p-4 rounded-xl border border-stone-100 bg-stone-50/50 hover:bg-stone-50 transition-all">
+                <div class="p-4 rounded-2xl border border-stone-100 bg-stone-50/50 relative group">
+                    <button onclick="window.deletePlan('${item.id}')" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-stone-300 hover:text-red-400">
+                        <i data-lucide="trash-2" class="w-3 h-3"></i>
+                    </button>
                     <div class="flex justify-between text-[8px] font-bold text-stone-400 uppercase mb-1">
                         <span>${item.date}</span>
                         <span>${item.temp}</span>
                     </div>
-                    <p class="text-sm text-stone-700 font-medium mb-2">"${item.text}"</p>
+                    <p class="text-sm text-stone-700 font-medium mb-2 pr-4">"${item.text}"</p>
                     <div class="flex gap-1">
                         ${[1,2,3,4,5].map(i => `
                             <button onclick="window.updatePlanRating('${item.id}', ${i})">
